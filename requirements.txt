@@ -1,7 +1,8 @@
-piexif
-pillow 
 tqdm 
 geopandas 
 pandas 
-mapillary_tools
 ipykernel
+py360convert 
+pillow 
+numpy
+mapillary
