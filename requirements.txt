@@ -6,3 +6,5 @@ py360convert
 pillow 
 numpy
 mapillary
+iopaint
+segment-anything-py
