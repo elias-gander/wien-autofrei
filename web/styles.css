@@ -1,0 +1,14 @@
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+#panorama {
+  flex: 1;
+}
+
+#toggle-button {
+  margin: 1rem;
+}

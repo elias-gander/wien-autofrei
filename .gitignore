@@ -3,6 +3,8 @@
 !download-inpaint-upload
 !download-inpaint-upload/*.py
 !web
+!web/*
 !README.md
 !requirements.txt
 !.gitignore
+!sampled-points.gpkg
