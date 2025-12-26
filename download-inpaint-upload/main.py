@@ -147,7 +147,7 @@ for _, row in tqdm(points.iterrows(), total=points.shape[0]):
             "iopaint",
             "run",
             "--model=runwayml/stable-diffusion-v1-5",
-            "--device=mps",
+            "--device=cuda",
             "--image",
             CUBEMAP_FACES_FOLDER_NAME,
             "--mask",
