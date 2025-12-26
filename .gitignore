@@ -2,6 +2,7 @@
 !*.ipynb
 !download-inpaint-upload
 !download-inpaint-upload/*.py
+!web
 !README.md
 !requirements.txt
 !.gitignore
