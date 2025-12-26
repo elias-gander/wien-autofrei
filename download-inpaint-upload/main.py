@@ -4,6 +4,10 @@ from shapely.geometry import Point
 from tqdm import tqdm
 import mapillary.interface as mly
 from constants import (
+    CLOUDFLARE_ACCESS_KEY_ID,
+    CLOUDFLARE_BUCKET_NAME,
+    CLOUDFLARE_ENDPOINT_URL,
+    CLOUDFLARE_SECRET_ACCESS_KEY,
     CUBEMAP_FACE_SIZE_PX,
     CUBEMAP_FACES_FOLDER_NAME,
     DEGREES_PER_METER_LON_VIENNA,
@@ -25,6 +29,7 @@ import cv2
 import mapbox_vector_tile
 import subprocess
 import py360convert
+import boto3
 
 processed_point_ids = set()
 file_path = "processed_points.txt"
@@ -50,6 +55,13 @@ points = gpd.GeoDataFrame(
     crs="EPSG:4326",
 )
 mly.set_access_token(MAPILLARY_ACCESS_TOKEN)
+s3 = boto3.client(
+    service_name="s3",
+    endpoint_url=CLOUDFLARE_ENDPOINT_URL,
+    aws_access_key_id=CLOUDFLARE_ACCESS_KEY_ID,
+    aws_secret_access_key=CLOUDFLARE_SECRET_ACCESS_KEY,
+    region_name="auto",
+)
 for _, row in tqdm(points.iterrows(), total=points.shape[0]):
     id = row["objectid"]
     if id in processed_point_ids:
@@ -121,7 +133,10 @@ for _, row in tqdm(points.iterrows(), total=points.shape[0]):
 
         mask = cv2.dilate(
             mask,
-            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21)),
+            cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE,
+                (int(CUBEMAP_FACE_SIZE_PX / 50), int(CUBEMAP_FACE_SIZE_PX / 50)),
+            ),
             iterations=1,
         )
         Image.fromarray(mask).save(f"{MASKS_FOLDER_NAME}/{id}.png")
@@ -131,7 +146,7 @@ for _, row in tqdm(points.iterrows(), total=points.shape[0]):
         [
             "iopaint",
             "run",
-            "--model=lama",
+            "--model=runwayml/stable-diffusion-v1-5",
             "--device=mps",
             "--image",
             CUBEMAP_FACES_FOLDER_NAME,
@@ -167,7 +182,23 @@ for _, row in tqdm(points.iterrows(), total=points.shape[0]):
     dummy_cubemap_face = Image.new(
         "RGB", (CUBEMAP_FACE_SIZE_PX, CUBEMAP_FACE_SIZE_PX), (128, 128, 128)
     )
-    cubemap_face_direction_to_image_dict = {
+    cubemap_face_direction_to_original_image_dict = {
+        direction: (
+            np.array(
+                Image.open(f"{CUBEMAP_FACES_FOLDER_NAME}/{id}.jpg")
+                if id
+                else dummy_cubemap_face
+            )
+        )
+        for direction, id in cubemap_face_direction_to_image_id_dict.items()
+    }
+    panorama = py360convert.c2e(
+        cubemap_face_direction_to_original_image_dict,
+        CUBEMAP_FACE_SIZE_PX,
+        CUBEMAP_FACE_SIZE_PX * 2,
+        cube_format="dict",
+    )
+    cubemap_face_direction_to_inpainted_image_dict = {
         direction: (
             np.array(
                 Image.open(f"{INPAINTED_CUBEMAP_FACES_FOLDER_NAME}/{id}.png")
@@ -177,18 +208,29 @@ for _, row in tqdm(points.iterrows(), total=points.shape[0]):
         )
         for direction, id in cubemap_face_direction_to_image_id_dict.items()
     }
-    pano = py360convert.c2e(
-        cubemap_face_direction_to_image_dict,
+    panorama_carfree = py360convert.c2e(
+        cubemap_face_direction_to_inpainted_image_dict,
         CUBEMAP_FACE_SIZE_PX,
         CUBEMAP_FACE_SIZE_PX * 2,
         cube_format="dict",
     )
 
     # 5. upload
-    Image.fromarray(pano.astype(np.uint8)).save("panorama.jpg", quality=75)
+    Image.fromarray(panorama.astype(np.uint8)).save("panorama.jpg", quality=75)
+    Image.fromarray(panorama_carfree.astype(np.uint8)).save(
+        "panorama-carfree.jpg", quality=75
+    )
+    # buffer = BytesIO()
+    # Image.fromarray(panorama).save(buffer, format="JPG", quality=75)
+    # buffer.seek(0)
+    # s3.put_object(Bucket=CLOUDFLARE_BUCKET_NAME, Key=f"{id}.jpg", Body=buffer)
+    # buffer = BytesIO()
+    # Image.fromarray(panorama_carfree).save(buffer, format="JPG", quality=75)
+    # buffer.seek(0)
+    # s3.put_object(Bucket=CLOUDFLARE_BUCKET_NAME, Key=f"{id}-carfree.jpg", Body=buffer)
 
-    with open("processed.txt", "a") as file:
-        file.write(id)
-        file.write("\n")
-        file.flush()
-        os.fsync(file.fileno())
+# with open("processed.txt", "a") as file:
+#     file.write(str(id))
+#     file.write("\n")
+#     file.flush()
+#     os.fsync(file.fileno())
