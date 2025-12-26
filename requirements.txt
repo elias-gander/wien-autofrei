@@ -7,4 +7,3 @@ pillow
 numpy
 mapillary
 iopaint
-segment-anything-py
